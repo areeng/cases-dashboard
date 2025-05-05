@@ -5,11 +5,9 @@ import plotly.express as px
 st.set_page_config(page_title="CASES Dashboard", layout="wide")
 st.title("CASES Dashboard")
 
-# Завантаження CSV-файлу
-uploaded_file = st.file_uploader("Завантажте CSV-файл", type="csv")
-
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+# 🔄 Автоматичне завантаження CSV з Google Drive
+csv_url = "https://drive.google.com/uc?export=download&id=1AHwjeTzdiGSc87CeAl0ISmnbtLvNLZ-F"
+df = pd.read_csv(csv_url)
 
     # Обробка дати
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
