@@ -5,28 +5,29 @@ import plotly.express as px
 st.set_page_config(page_title="CASES Dashboard", layout="wide")
 st.title("CASES Dashboard")
 
+# Завантаження CSV-файлу
 uploaded_file = st.file_uploader("Завантажте CSV-файл", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    # Обработка даты
+    # Обробка дати
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"])
 
-    # Диапазон дат
+    # Діапазон доступних дат
     min_date = df["date"].min()
     max_date = df["date"].max()
 
-    # Фильтр по дате
-    st.sidebar.header("Фильтр по дате")
-    start_date, end_date = st.sidebar.date_input("Выберите период", [min_date, max_date])
+    # Фільтр за датою
+    st.sidebar.header("Фільтр за датою")
+    start_date, end_date = st.sidebar.date_input("Оберіть період", [min_date, max_date])
 
-    # Фильтрация по диапазону
+    # Фільтрація даних за вибраним періодом
     mask = (df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))
     filtered_df = df[mask]
 
-    # 🔧 Приводим нужные колонки к числовому типу
+    # 🔧 Перетворення колонок на числові типи
     cols_to_convert = [
         "start", "new", "reactivated", "upgradedEnter", "downgradedEnter",
         "end", "upgradedExit", "downgradedExit"
@@ -38,20 +39,20 @@ if uploaded_file:
         else:
             filtered_df[col] = 0
 
-    # Метрики по началу и концу
+    # Метрики на початок та кінець періоду
     start_value_row = df[df["date"] == pd.to_datetime(start_date)]
     start_value = int(pd.to_numeric(start_value_row["start"], errors="coerce").fillna(0).values[0]) if not start_value_row.empty else "—"
 
     end_value_row = df[df["date"] == pd.to_datetime(end_date)]
     end_value = int(pd.to_numeric(end_value_row["end"], errors="coerce").fillna(0).values[0]) if not end_value_row.empty else "—"
 
-    # Метрики по суммам
+    # Метрики за сумою
     new_subs = int(filtered_df["new"].sum())
     reactivated = int(filtered_df["reactivated"].sum())
     upgraded = int(filtered_df["upgradedEnter"].sum())
     downgraded = int(filtered_df["downgradedEnter"].sum())
 
-    # Вычисление Churned users по дням
+    # Розрахунок Churned Users по днях
     churned_series = (
         filtered_df["start"]
         + filtered_df["new"]
@@ -65,51 +66,35 @@ if uploaded_file:
 
     churned_total = int(churned_series.sum())
 
-    # Вывод всех метрик в одну строку
+    # Виведення основних метрик в один ряд
     st.subheader("Метрики")
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-    col1.metric("Подписчиков\nна начало периода", start_value)
-    col2.metric("Подписчиков\nна конец периода", end_value)
+    col1.metric("Підписників\nна початок періоду", start_value)
+    col2.metric("Підписників\nна кінець періоду", end_value)
     col3.metric("New\nSubscribers", new_subs)
     col4.metric("Reactivated\nUsers", reactivated)
     col5.metric("Upgrade\n(вхід)", upgraded)
     col6.metric("Downgrade\n(вхід)", downgraded)
     col7.metric("Churned\nUsers", churned_total)
 
-    # Вычисление Churned Users по дням (в виде столбца)
-    filtered_df["Churned Users"] = (
-        filtered_df["start"]
-        + filtered_df["new"]
-        + filtered_df["reactivated"]
-        + filtered_df["upgradedEnter"]
-        + filtered_df["downgradedEnter"]
-        - filtered_df["end"]
-        - filtered_df["upgradedExit"]
-        - filtered_df["downgradedExit"]
-    ).clip(lower=0)
+    # Додавання колонки Churned Users в таблицю
+    filtered_df["Churned Users"] = churned_series
 
-    # График "Users"
+    # 📈 Графік "Users"
     st.subheader("Users")
 
-    # Подготовка данных для графика
+    # Підготовка даних до графіка
     chart_data = filtered_df[["date", "start", "new", "reactivated", "Churned Users"]].copy()
     chart_data = chart_data.sort_values("date")
 
-    # Построение графика
+    # Побудова графіка
     fig = px.line(
         chart_data,
         x="date",
         y=["start", "new", "reactivated", "Churned Users"],
         markers=True
     )
-
-    # Удалим подписи осей
-    fig.update_layout(
-        xaxis_title=None,
-        yaxis_title=None
-    )
-
-    # Покажем все даты на оси X
+    fig.update_layout(xaxis_title=None, yaxis_title=None)
     fig.update_xaxes(tickmode="linear", tickangle=45)
 
     st.plotly_chart(fig, use_container_width=True)
@@ -118,7 +103,7 @@ if uploaded_file:
     st.subheader("Цільові показники місяця")
 
     subscription_price = 1000
-    ad_budget = 5000  # рекламный бюджет
+    ad_budget = 5000  # рекламний бюджет
 
     # MRR
     if not filtered_df.empty:
@@ -154,7 +139,7 @@ if uploaded_file:
         lifetime = None
         lifetime_str = "—"
 
-    # ARPPU (внутренне)
+    # ARPPU (внутрішня метрика)
     try:
         arppu = mrr / end_value
     except (ZeroDivisionError, TypeError):
@@ -183,7 +168,7 @@ if uploaded_file:
     except (ZeroDivisionError, TypeError):
         ltv_cac_str = "—"
 
-    # Вывод всех метрик в 7 колонках
+    # Виведення цільових метрик
     col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     col1.metric("MRR", mrr)
     col2.metric("Churn rate", churn_rate_str)
@@ -193,32 +178,22 @@ if uploaded_file:
     col6.metric("CAC", cac_str)
     col7.metric("LTV / CAC", ltv_cac_str)
 
-    # 📈 График MRR по дням
+    # 📈 Графік MRR по днях
     st.subheader("MRR")
 
-    # Добавим колонку с ежедневным MRR
     filtered_df["MRR"] = filtered_df["start"] * subscription_price
 
-    # Строим график
     fig_mrr = px.line(
         filtered_df,
         x="date",
         y="MRR",
         markers=True
     )
-
-    # Убираем подписи осей
-    fig_mrr.update_layout(
-        xaxis_title=None,
-        yaxis_title=None
-    )
-
-    # Показываем все даты на оси X
+    fig_mrr.update_layout(xaxis_title=None, yaxis_title=None)
     fig_mrr.update_xaxes(tickmode="linear", tickangle=45)
 
-    # Отображаем график
     st.plotly_chart(fig_mrr, use_container_width=True)
 
-    # Таблица
-    st.subheader("Данные за выбранный период:")
+    # 📋 Таблиця даних
+    st.subheader("Дані за вибраний період:")
     st.dataframe(filtered_df, use_container_width=True)
