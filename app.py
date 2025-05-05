@@ -21,7 +21,17 @@ if uploaded_file:
 
     # Фільтр за датою
     st.sidebar.header("Фільтр за датою")
-    start_date, end_date = st.sidebar.date_input("Оберіть період", [min_date, max_date])
+    from datetime import timedelta
+
+    default_end = df["date"].max()
+    default_start = default_end - timedelta(days=30)
+
+    start_date, end_date = st.sidebar.date_input(
+        "Оберіть період",
+        [default_start, default_end],
+        min_value=min_date,
+        max_value=max_date
+    )
 
     # Фільтрація даних за вибраним періодом
     mask = (df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))
