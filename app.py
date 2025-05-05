@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(page_title="CASES Dashboard", layout="wide")
 st.title("CASES Dashboard")
 
-uploaded_file = st.file_uploader("Загрузите CSV-файл", type="csv")
+uploaded_file = st.file_uploader("Завантажте CSV-файл", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
