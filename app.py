@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 from datetime import timedelta
 
 st.set_page_config(page_title="CASES Dashboard", layout="wide")
@@ -105,10 +106,10 @@ churned_total = int(churned_series.sum())
 # 📌 Виведення основних метрик в один ряд
 st.subheader("Метрики")
 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-col1.metric("Користувачів\nна початок періоду", start_value)
-col2.metric("Користувачів\nна кінець періоду", end_value)
-col3.metric("Нових\nкористувачів", new_subs)
-col4.metric("Реактивованих\nкористувачів", reactivated)
+col1.metric("Підписників\nна початок періоду", start_value)
+col2.metric("Підписників\nна кінець періоду", end_value)
+col3.metric("Нових\nпідписників", new_subs)
+col4.metric("Реактивованих\nпідписників", reactivated)
 col5.metric("Upgrade\n(вхід)", upgraded)
 col6.metric("Downgrade\n(вхід)", downgraded)
 col7.metric("Churned\nUsers", churned_total)
@@ -231,3 +232,120 @@ st.plotly_chart(fig_mrr, use_container_width=True)
 # 📋 Таблиця даних
 # st.subheader("Дані за вибраний період:")
 # st.dataframe(filtered_df, use_container_width=True)
+
+# 📊 Порівняння тарифів
+st.subheader("Порівняння тарифів")
+
+# 🧾 Показники, які хочемо порівнювати
+metrics_list = [
+    "Підписники на початок періоду",
+    "Підписники на кінець періоду",
+    "Нові користувачі",
+    "Реактивовані користувачі",
+    "Churned users",
+    "MRR",
+    "Churn rate",
+    "Lifetime (міс.)",
+    "ARPPU",
+    "LTV",
+    "CAC",
+    "LTV / CAC"
+]
+
+# 🔀 Групування тарифів
+tariff_names = list(tariff_files.keys())
+theory_tariffs = [name for name in tariff_names if "Theory Only" in name]
+full_tariffs = [name for name in tariff_names if "Full Access" in name]
+
+# 🧱 Створення заголовків MultiIndex
+multi_columns = pd.MultiIndex.from_tuples([
+    ("Лише теорія", name.replace("Theory Only ", "").replace("UAH", "грн")) for name in theory_tariffs
+] + [
+    ("Повний доступ", name.replace("Full Access ", "").replace("UAH", "грн")) for name in full_tariffs
+])
+
+# 📐 Порожня таблиця з MultiIndex-колонками
+data = pd.DataFrame(index=metrics_list, columns=multi_columns)
+
+# 🔄 Проходимо по всім тарифам і обчислюємо метрики
+for tariff in theory_tariffs + full_tariffs:
+    file_id = tariff_files[tariff]
+    csv_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    try:
+        df_tariff = pd.read_csv(csv_url)
+        df_tariff["date"] = pd.to_datetime(df_tariff["date"], errors="coerce")
+        df_tariff = df_tariff.dropna(subset=["date"])
+        df_tariff = df_tariff.sort_values("date")
+
+        # Фільтр по даті
+        mask = (df_tariff["date"] >= pd.to_datetime(start_date)) & (df_tariff["date"] <= pd.to_datetime(end_date))
+        df_filtered = df_tariff[mask].copy()
+
+        # Перетворення на числа
+        for col in cols_to_convert:
+            if col in df_filtered.columns:
+                df_filtered[col] = pd.to_numeric(df_filtered[col], errors="coerce").fillna(0)
+            else:
+                df_filtered[col] = 0
+
+        # Метрики
+        start_row = df_tariff[df_tariff["date"] == pd.to_datetime(start_date)]
+        end_row = df_tariff[df_tariff["date"] == pd.to_datetime(end_date)]
+
+        start_val = int(start_row["start"].values[0]) if not start_row.empty else 0
+        end_val = int(end_row["end"].values[0]) if not end_row.empty else 0
+        new_val = int(df_filtered["new"].sum())
+        reactivated_val = int(df_filtered["reactivated"].sum())
+
+        churned_series = (
+            df_filtered["start"]
+            + df_filtered["new"]
+            + df_filtered["reactivated"]
+            + df_filtered["upgradedEnter"]
+            + df_filtered["downgradedEnter"]
+            - df_filtered["end"]
+            - df_filtered["upgradedExit"]
+            - df_filtered["downgradedExit"]
+        ).clip(lower=0)
+
+        churned_val = int(churned_series.sum())
+        mrr_val = int(df_filtered["start"].mean() * subscription_price) if not df_filtered.empty else 0
+
+        churn_rate = churned_val / start_val if start_val else None
+        lifetime = 1 / churn_rate if churn_rate else None
+        arppu = mrr_val / end_val if end_val else None
+        ltv = lifetime * arppu if lifetime and arppu else None
+        cac = ad_budget / new_val if new_val else None
+        ltv_cac = ltv / cac if ltv and cac else None
+
+        # Визначаємо колонку в таблиці
+        col_label = tariff.replace("Theory Only ", "").replace("Full Access ", "").replace("UAH", "грн")
+        col_group = "Лише теорія" if "Theory Only" in tariff else "Повний доступ"
+
+        # Запис значень у таблицю
+        data.loc["Підписники на початок періоду", (col_group, col_label)] = start_val
+        data.loc["Підписники на кінець періоду", (col_group, col_label)] = end_val
+        data.loc["Нові користувачі", (col_group, col_label)] = new_val
+        data.loc["Реактивовані користувачі", (col_group, col_label)] = reactivated_val
+        data.loc["Churned users", (col_group, col_label)] = churned_val
+        data.loc["MRR", (col_group, col_label)] = mrr_val
+        data.loc["Churn rate", (col_group, col_label)] = f"{churn_rate:.1%}" if churn_rate is not None else "—"
+        data.loc["Lifetime (міс.)", (col_group, col_label)] = f"{lifetime:.1f}" if lifetime is not None else "—"
+        data.loc["ARPPU", (col_group, col_label)] = f"{arppu:.0f}" if arppu is not None else "—"
+        data.loc["LTV", (col_group, col_label)] = f"{ltv:.0f}" if ltv is not None else "—"
+        data.loc["CAC", (col_group, col_label)] = f"{cac:.2f}" if cac is not None else "—"
+        data.loc["LTV / CAC", (col_group, col_label)] = f"{ltv_cac:.2f}" if ltv_cac is not None else "—"
+
+    except Exception as e:
+        st.warning(f"Не вдалося завантажити або обробити дані для тарифу {tariff}: {e}")
+
+# 🖼 Вивід кастомної таблиці з центруванням заголовків
+st.markdown(
+    data.style
+    .set_table_styles([
+        {"selector": "thead th", "props": [("text-align", "center")]}
+    ])
+    .to_html(),
+    unsafe_allow_html=True
+)
