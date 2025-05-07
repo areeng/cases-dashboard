@@ -4,6 +4,16 @@ import plotly.express as px
 import numpy as np
 from datetime import timedelta
 
+@st.cache_data(show_spinner=False)
+def load_tariff_df(file_id):
+    """Завантажує CSV з Google Drive, перетворює дату і повертає DataFrame"""
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    df = pd.read_csv(url)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+    df = df.sort_values("date")
+    return df
+
 st.set_page_config(page_title="CASES Dashboard", layout="wide")
 st.title("CASES Dashboard")
 
@@ -273,10 +283,7 @@ for tariff in theory_tariffs + full_tariffs:
     csv_url = f"https://drive.google.com/uc?export=download&id={file_id}"
 
     try:
-        df_tariff = pd.read_csv(csv_url)
-        df_tariff["date"] = pd.to_datetime(df_tariff["date"], errors="coerce")
-        df_tariff = df_tariff.dropna(subset=["date"])
-        df_tariff = df_tariff.sort_values("date")
+        df_tariff = load_tariff_df(file_id)
 
         # Фільтр по даті
         mask = (df_tariff["date"] >= pd.to_datetime(start_date)) & (df_tariff["date"] <= pd.to_datetime(end_date))
