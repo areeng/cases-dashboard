@@ -58,16 +58,62 @@ df = df.dropna(subset=["date"])
 min_date = df["date"].min()
 max_date = df["date"].max()
 
-# 🔎 Фільтр за датою (останні 30 днів за замовчуванням)
-st.sidebar.header("Фільтр за датою")
-default_end = max_date
-default_start = default_end - timedelta(days=30)
+# 🔎 Контрол з календарем (останні 30 днів за замовчуванням)
+from datetime import datetime
 
+# 📅 Сьогоднішній день
+today = pd.to_datetime(datetime.today().date())
+min_date = df["date"].min()
+max_data_date = df["date"].max()
+
+st.sidebar.header("Фільтр за датою")
+
+# 🧭 Випадаючий список періодів
+preset_option = st.sidebar.selectbox(
+    "Швидкий вибір періоду:",
+    (
+        "Останні 30 днів",
+        "Попередній місяць",
+        "Останні 3 місяці",
+        "Останні 6 місяців",
+        "Останній рік",
+        "Весь час"
+    )
+)
+
+# 🔁 Обчислення періоду на основі вибору
+if preset_option == "Останні 30 днів":
+    end_default = min(today, max_data_date)
+    start_default = end_default - timedelta(days=30)
+
+elif preset_option == "Попередній місяць":
+    first_day_this_month = today.replace(day=1)
+    last_day_prev_month = first_day_this_month - timedelta(days=1)
+    start_default = last_day_prev_month.replace(day=1)
+    end_default = last_day_prev_month
+
+elif preset_option == "Останні 3 місяці":
+    end_default = min(today, max_data_date)
+    start_default = end_default - pd.DateOffset(months=3)
+
+elif preset_option == "Останні 6 місяців":
+    end_default = min(today, max_data_date)
+    start_default = end_default - pd.DateOffset(months=6)
+
+elif preset_option == "Останній рік":
+    end_default = min(today, max_data_date)
+    start_default = end_default - pd.DateOffset(years=1)
+
+elif preset_option == "Весь час":
+    start_default = min_date
+    end_default = max_data_date
+
+# 📆 Календар з передзаповненим періодом
 start_date, end_date = st.sidebar.date_input(
-    "Оберіть період",
-    [default_start, default_end],
+    "Або оберіть вручну:",
+    value=[start_default, end_default],
     min_value=min_date,
-    max_value=max_date
+    max_value=max_data_date
 )
 
 # 🔍 Фільтрація даних за вибраним періодом
