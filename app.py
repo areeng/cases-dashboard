@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import re
 from datetime import timedelta
 
 @st.cache_data(show_spinner=False)
@@ -45,6 +46,14 @@ for tariff in selected_tariffs:
     csv_url = f"https://drive.google.com/uc?export=download&id={file_id}"
     df_part = pd.read_csv(csv_url)
     df_part["tariff_name"] = tariff  # додаємо колонку з назвою тарифу
+
+    # Додаємо колонку з ціною тарифу (витягуємо з назви)
+    match = re.search(r"(\d+)UAH", tariff)
+    if match:
+        df_part["price"] = int(match.group(1))
+    else:
+        df_part["price"] = 0  # якщо раптом немає ціни в назві тарифу
+
     dfs.append(df_part)
 
 # 🧮 Об'єднуємо всі обрані таблиці в одну
@@ -116,45 +125,74 @@ start_date, end_date = st.sidebar.date_input(
     max_value=max_data_date
 )
 
-# 🔍 Фільтрація даних за вибраним періодом
-mask = (df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))
-filtered_df = df[mask]
-
-# 🔧 Перетворення колонок на числові типи
+# Визначаємо колонки для числового перетворення
 cols_to_convert = [
-    "start", "new", "reactivated", "upgradedEnter", "downgradedEnter",
+    "start", "new", "reactivated",
+    "upgradedEnter", "downgradedEnter",
     "end", "upgradedExit", "downgradedExit"
 ]
 
+# 🔍 Фільтрація даних за вибраним періодом
+mask = (df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))
+filtered_raw = df.loc[mask].copy()
+
+# 🔧 Перетворення колонок на числові типи
 for col in cols_to_convert:
-    if col in filtered_df.columns:
-        filtered_df[col] = pd.to_numeric(filtered_df[col], errors="coerce").fillna(0)
-    else:
-        filtered_df[col] = 0
+    filtered_raw[col] = pd.to_numeric(filtered_raw.get(col, 0), errors="coerce").fillna(0)
+
+# Агрегування даних по даті для всіх вибраних тарифів
+aggregated_df = (
+    filtered_raw
+    .groupby("date", as_index=False)[cols_to_convert]
+    .sum()
+)
+
+# Розрахунок Churned Users
+aggregated_df["Churned Users"] = (
+    aggregated_df["start"]
+    + aggregated_df["new"]
+    + aggregated_df["reactivated"]
+    + aggregated_df["upgradedEnter"]
+    + aggregated_df["downgradedEnter"]
+    - aggregated_df["end"]
+    - aggregated_df["upgradedExit"]
+    - aggregated_df["downgradedExit"]
+).clip(lower=0)
 
 # 📊 Метрики на початок та кінець періоду
 start_value_row = df[df["date"] == pd.to_datetime(start_date)]
-start_value = int(pd.to_numeric(start_value_row["start"], errors="coerce").fillna(0).values[0]) if not start_value_row.empty else "—"
+start_value = int(
+    aggregated_df.loc[
+        aggregated_df["date"] == pd.to_datetime(start_date),
+        "start"
+    ].sum()
+) if not aggregated_df.empty else "—"
 
 end_value_row = df[df["date"] == pd.to_datetime(end_date)]
-end_value = int(pd.to_numeric(end_value_row["end"], errors="coerce").fillna(0).values[0]) if not end_value_row.empty else "—"
+end_value = int(
+    aggregated_df.loc[
+        aggregated_df["date"] == pd.to_datetime(end_date),
+        "end"
+    ].sum()
+) if not aggregated_df.empty else "—"
 
 # 📈 Метрики за сумою
-new_subs = int(filtered_df["new"].sum())
-reactivated = int(filtered_df["reactivated"].sum())
-upgraded = int(filtered_df["upgradedEnter"].sum())
-downgraded = int(filtered_df["downgradedEnter"].sum())
+new_subs = int(aggregated_df["new"].sum())
+reactivated = int(aggregated_df["reactivated"].sum())
+upgraded = int(aggregated_df["upgradedEnter"].sum())
+downgraded = int(aggregated_df["downgradedEnter"].sum())
+churned_total= int(aggregated_df["Churned Users"].sum())
 
 # 🔁 Розрахунок Churned Users по днях
 churned_series = (
-    filtered_df["start"]
-    + filtered_df["new"]
-    + filtered_df["reactivated"]
-    + filtered_df["upgradedEnter"]
-    + filtered_df["downgradedEnter"]
-    - filtered_df["end"]
-    - filtered_df["upgradedExit"]
-    - filtered_df["downgradedExit"]
+    aggregated_df["start"]
+    + aggregated_df["new"]
+    + aggregated_df["reactivated"]
+    + aggregated_df["upgradedEnter"]
+    + aggregated_df["downgradedEnter"]
+    - aggregated_df["end"]
+    - aggregated_df["upgradedExit"]
+    - aggregated_df["downgradedExit"]
 ).clip(lower=0)
 
 churned_total = int(churned_series.sum())
@@ -171,16 +209,13 @@ col6.metric("Downgrade\n(вхід)", downgraded)
 col7.metric("Churned\nUsers", churned_total)
 
 # ➕ Додавання колонки Churned Users до таблиці
-filtered_df["Churned Users"] = churned_series
+aggregated_df["Churned Users"] = churned_series
 
 # 📈 Графік "Users"
 st.subheader("Користувачі")
 
-chart_data = filtered_df[["date", "start", "new", "reactivated", "Churned Users"]].copy()
-chart_data = chart_data.sort_values("date")
-
 fig = px.line(
-    chart_data,
+    aggregated_df,
     x="date",
     y=["start", "new", "reactivated", "Churned Users"],
     markers=True,
@@ -193,14 +228,21 @@ st.plotly_chart(fig, use_container_width=True)
 # 💰 Цільові показники місяця
 st.subheader("Цільові показники місяця")
 
-subscription_price = 1000
 ad_budget = 5000  # рекламний бюджет
 
 # MRR
-if not filtered_df.empty:
-    mrr = int(filtered_df["start"].mean() * subscription_price)
-else:
-    mrr = "—"
+
+# Групуємо по назві тарифу та розраховуємо середній start
+mrr = 0
+for tariff in selected_tariffs:
+    # Фільтруємо агрегований датафрейм по тарифу
+    tariff_df = filtered_raw[filtered_raw["tariff_name"] == tariff]
+    if not tariff_df.empty:
+        avg_start = tariff_df["start"].mean()
+        price = tariff_df["price"].iloc[0]  # ціна для цього тарифу
+        mrr += avg_start * price
+
+mrr = int(round(mrr))
 
 # Churn Rate
 try:
@@ -211,15 +253,25 @@ except (ZeroDivisionError, TypeError):
     churn_rate_str = "—"
 
 # Growth Rate
-first_day_row = df[df["date"] == pd.to_datetime(start_date)]
-last_day_row = df[df["date"] == pd.to_datetime(end_date)]
+# 💡 Розрахунок MRR на початок і кінець періоду з урахуванням усіх тарифів
+
+def calc_mrr_on_date(date, df):
+    mrr = 0
+    for tariff in selected_tariffs:
+        sub = df[(df["date"] == pd.to_datetime(date)) & (df["tariff_name"] == tariff)]
+        if not sub.empty:
+            start = sub["start"].values[0]
+            price = sub["price"].values[0]
+            mrr += start * price
+    return mrr
+
+mrr_first = calc_mrr_on_date(start_date, filtered_raw)
+mrr_last  = calc_mrr_on_date(end_date, filtered_raw)
 
 try:
-    mrr_first = float(first_day_row["start"].values[0]) * subscription_price
-    mrr_last = float(last_day_row["start"].values[0]) * subscription_price
-    growth_rate = (mrr_last - mrr_first) / mrr_last if mrr_last != 0 else 0
+    growth_rate = (mrr_last - mrr_first) / mrr_first if mrr_first != 0 else 0
     growth_rate_str = f"{growth_rate:.1%}"
-except (IndexError, ValueError, ZeroDivisionError):
+except ZeroDivisionError:
     growth_rate_str = "—"
 
 # Lifetime
@@ -230,33 +282,35 @@ else:
     lifetime = None
     lifetime_str = "—"
 
-# ARPPU (внутрішня метрика)
+# ARPPU — середній дохід на платника
 try:
-    arppu = mrr / end_value
-except (ZeroDivisionError, TypeError):
+    arppu = mrr / end_value if end_value else None
+    arppu_str = f"{arppu:.2f}" if arppu is not None else "—"
+except ZeroDivisionError:
     arppu = None
+    arppu_str = "—"
 
-# LTV
+# LTV — життєвий цикл клієнта
 if lifetime and arppu:
-    ltv = int(lifetime * arppu)
+    ltv = lifetime * arppu
+    ltv_str = f"{int(ltv)}"
 else:
     ltv = None
-ltv_str = ltv if ltv is not None else "—"
+    ltv_str = "—"
 
-# CAC
+# CAC — вартість залучення одного підписника
 try:
-    cac = ad_budget / new_subs
-    cac = round(cac, 2)
-    cac_str = f"{cac:.2f}"
-except (ZeroDivisionError, TypeError):
+    cac = ad_budget / new_subs if new_subs else None
+    cac_str = f"{cac:.2f}" if cac is not None else "—"
+except ZeroDivisionError:
     cac = None
     cac_str = "—"
 
 # LTV / CAC
 try:
-    ltv_cac = ltv / cac
-    ltv_cac_str = f"{ltv_cac:.2f}"
-except (ZeroDivisionError, TypeError):
+    ltv_cac = ltv / cac if (ltv is not None and cac) else None
+    ltv_cac_str = f"{ltv_cac:.2f}" if ltv_cac is not None else "—"
+except ZeroDivisionError:
     ltv_cac_str = "—"
 
 # 🧮 Виведення цільових метрик
@@ -266,16 +320,30 @@ col2.metric("Churn rate", churn_rate_str)
 col3.metric("Growth rate", growth_rate_str)
 col4.metric("Lifetime (міс.)", lifetime_str)
 col5.metric("LTV", ltv_str)
-col6.metric("CAC", cac_str)
-col7.metric("LTV / CAC", ltv_cac_str)
+#col6.metric("CAC", cac_str)
+#col7.metric("LTV / CAC", ltv_cac_str)
 
 # 📊 Графік MRR по днях
 st.subheader("MRR")
 
-filtered_df["MRR"] = filtered_df["start"] * subscription_price
+# Додаємо в aggregated_df стовпець MRR по днях (з урахуванням цін тарифів)
+def calc_mrr_day(day):
+    # day — дата
+    mrr_day = 0
+    for tariff in selected_tariffs:
+        # Знаходимо всі рядки в filtered_raw з потрібною датою і тарифом
+        sub = filtered_raw[(filtered_raw["date"] == day) & (filtered_raw["tariff_name"] == tariff)]
+        if not sub.empty:
+            start = sub["start"].values[0]
+            price = sub["price"].values[0]
+            mrr_day += start * price
+    return mrr_day
 
+aggregated_df["MRR"] = aggregated_df["date"].apply(calc_mrr_day)
+
+# Будуємо графік за новим стовпчиком
 fig_mrr = px.line(
-    filtered_df,
+    aggregated_df,
     x="date",
     y="MRR",
     markers=True
@@ -287,7 +355,7 @@ st.plotly_chart(fig_mrr, use_container_width=True)
 
 # 📋 Таблиця даних
 # st.subheader("Дані за вибраний період:")
-# st.dataframe(filtered_df, use_container_width=True)
+# st.dataframe(aggregated_df, use_container_width=True)
 
 # 📊 Порівняння тарифів
 st.subheader("Порівняння тарифів")
@@ -331,6 +399,13 @@ for tariff in theory_tariffs + full_tariffs:
     try:
         df_tariff = load_tariff_df(file_id)
 
+        # Додаємо колонку price, витягуючи ціну з назви тарифу
+        match = re.search(r"(\d+)UAH", tariff)
+        if match:
+            df_tariff["price"] = int(match.group(1))
+        else:
+            df_tariff["price"] = 0        
+
         # Фільтр по даті
         mask = (df_tariff["date"] >= pd.to_datetime(start_date)) & (df_tariff["date"] <= pd.to_datetime(end_date))
         df_filtered = df_tariff[mask].copy()
@@ -363,7 +438,11 @@ for tariff in theory_tariffs + full_tariffs:
         ).clip(lower=0)
 
         churned_val = int(churned_series.sum())
-        mrr_val = int(df_filtered["start"].mean() * subscription_price) if not df_filtered.empty else 0
+        if not df_filtered.empty:
+            price = df_filtered["price"].iloc[0]
+            mrr_val = int(df_filtered["start"].mean() * price)
+        else:
+            mrr_val = 0
 
         churn_rate = churned_val / start_val if start_val else None
         lifetime = 1 / churn_rate if churn_rate else None
@@ -392,6 +471,18 @@ for tariff in theory_tariffs + full_tariffs:
 
     except Exception as e:
         st.warning(f"Не вдалося завантажити або обробити дані для тарифу {tariff}: {e}")
+
+
+
+
+#Тимчасово приховуємо два рядки таблиці
+hide_metrics = ["CAC", "LTV / CAC"]
+data = data.drop(index=hide_metrics)
+
+
+
+
+
 
 # 🖼 Вивід кастомної таблиці з центруванням заголовків
 st.markdown(
