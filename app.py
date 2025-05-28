@@ -10,18 +10,39 @@ def load_tariff_df(file_id):
     """Завантажує CSV з Google Drive, перетворює дату і повертає DataFrame"""
     url = f"https://drive.google.com/uc?export=download&id={file_id}"
     df = pd.read_csv(url)
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
     df = df.dropna(subset=["date"])
     df = df.sort_values("date")
     return df
 
 st.set_page_config(page_title="CASES Dashboard", layout="wide")
+
+# CSS для плавного скролу з відступом
+st.markdown(
+    """
+    <style>
+      /* додаємо відступ зверху для всіх підзаголовків */
+      h3 { scroll-margin-top: 100px; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Заголовок дашборда
 st.title("CASES Dashboard")
 
-# 📦 Список тарифів і відповідних Google Drive ID
+# 📂 Список файлів зі статистикою по компаніям, студентам, профілям та тріалам
+statistic_files = {
+    "companies": "1OVBwvUjNbJFY_cvLCh6RynL_WKowqXJ2",
+    "students": "1gJTkWUssnOKKlBSIxk6rQETuEaFTA9EL",
+    "users": "1nuxKPhBP1qx09FcuCPG1uIobrG92dxHE",
+    "trials": "1AsIIcj-2lYQWXHfPoMWsdtA46nqUbduH"
+}
+
+# 📦 Список тарифів
 tariff_files = {
     "Full Access 0UAH": "1XoUhnsGUeVL3qwHMYJbk4mpCn3lhoEkB",
-    "Full Access 5UAH": "1ngAmfUoL3qYM6l_URNDECZRW35XC_thY",
+    # "Full Access 5UAH": "1ngAmfUoL3qYM6l_URNDECZRW35XC_thY",   це технічний тариф
     "Full Access 250UAH": "1G60JUAk_vQVXVQnjZF9uK2VwUbYDlK6P",
     "Full Access 350UAH": "1eYubeexGVF5MKJFZIF6ZOwEfDDad1zPB",
     "Full Access 390UAH": "1xeTeJV8JvOowE8JG5I6tog3euIKvDDNj",
@@ -60,7 +81,7 @@ for tariff in selected_tariffs:
 df = pd.concat(dfs, ignore_index=True)
 
 # 🗓 Обробка дати
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
 df = df.dropna(subset=["date"])
 
 # 📆 Діапазон доступних дат
@@ -125,6 +146,17 @@ start_date, end_date = st.sidebar.date_input(
     max_value=max_data_date
 )
 
+# Навигація по розділам
+st.sidebar.header("Навігація")
+nav_items = {
+    "Метрики": "metrics",
+    "Цільові показники місяця": "monthly-targets",
+    "Порівняння тарифів": "tariff-comparison",
+    "Компанії, студенти, профілі та тріали": "companies-students-profiles-trials"
+}
+for label, anchor in nav_items.items():
+    st.sidebar.markdown(f"<a href='#{anchor}'>{label}</a>", unsafe_allow_html=True)
+
 # Визначаємо колонки для числового перетворення
 cols_to_convert = [
     "start", "new", "reactivated",
@@ -135,6 +167,30 @@ cols_to_convert = [
 # 🔍 Фільтрація даних за вибраним періодом
 mask = (df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))
 filtered_raw = df.loc[mask].copy()
+
+# 📊 Завантаження та обробка статистики по компаніям, студентам і профілям
+def load_stat_file(file_id):
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    df_stat = pd.read_csv(url)
+    df_stat["date"] = pd.to_datetime(df_stat["date"], format="%Y-%m-%d", errors="coerce")
+    df_stat = df_stat.dropna(subset=["date"])
+    return df_stat
+
+# Завантаження статистики
+companies_df = load_stat_file(statistic_files["companies"])
+students_df  = load_stat_file(statistic_files["students"])
+users_df     = load_stat_file(statistic_files["users"])
+trials_df    = load_stat_file(statistic_files["trials"])
+
+# Фільтрація по вибраному періоду
+companies_filtered = companies_df[(companies_df["date"] >= pd.to_datetime(start_date)) &
+                                  (companies_df["date"] <= pd.to_datetime(end_date))]
+students_filtered  = students_df [(students_df["date"]  >= pd.to_datetime(start_date)) &
+                                  (students_df["date"]  <= pd.to_datetime(end_date))]
+users_filtered     = users_df    [(users_df["date"]     >= pd.to_datetime(start_date)) &
+                                  (users_df["date"]     <= pd.to_datetime(end_date))]
+trials_filtered    = trials_df    [(trials_df["date"]     >= pd.to_datetime(start_date)) &
+                                  (trials_df["date"]     <= pd.to_datetime(end_date))]
 
 # 🔧 Перетворення колонок на числові типи
 for col in cols_to_convert:
@@ -198,12 +254,14 @@ churned_series = (
 churned_total = int(churned_series.sum())
 
 # 📌 Виведення основних метрик в один ряд
+st.markdown("<a id='metrics'></a>", unsafe_allow_html=True)
 st.subheader("Метрики")
+
 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-col1.metric("Підписників\nна початок періоду", start_value)
-col2.metric("Підписників\nна кінець періоду", end_value)
-col3.metric("Нових\nпідписників", new_subs)
-col4.metric("Реактивованих\nпідписників", reactivated)
+col1.metric("Користувачів\nна початок періоду", start_value)
+col2.metric("Користувачів\nна кінець періоду", end_value)
+col3.metric("Нових\nкористувачів", new_subs)
+col4.metric("Реактивованих\nкористувачів", reactivated)
 col5.metric("Upgrade\n(вхід)", upgraded)
 col6.metric("Downgrade\n(вхід)", downgraded)
 col7.metric("Churned\nUsers", churned_total)
@@ -225,8 +283,9 @@ fig.update_xaxes(tickmode="linear", tickangle=45)
 
 st.plotly_chart(fig, use_container_width=True)
 
-# 💰 Цільові показники місяця
-st.subheader("Цільові показники місяця")
+# 💰 Цільові показники
+st.markdown("<a id='monthly-targets'></a>", unsafe_allow_html=True)
+st.subheader("Цільові показники")
 
 ad_budget = 5000  # рекламний бюджет
 
@@ -298,7 +357,7 @@ else:
     ltv = None
     ltv_str = "—"
 
-# CAC — вартість залучення одного підписника
+# CAC — вартість залучення одного користувача
 try:
     cac = ad_budget / new_subs if new_subs else None
     cac_str = f"{cac:.2f}" if cac is not None else "—"
@@ -358,12 +417,13 @@ st.plotly_chart(fig_mrr, use_container_width=True)
 # st.dataframe(aggregated_df, use_container_width=True)
 
 # 📊 Порівняння тарифів
+st.markdown("<a id='tariff-comparison'></a>", unsafe_allow_html=True)
 st.subheader("Порівняння тарифів")
 
 # 🧾 Показники, які хочемо порівнювати
 metrics_list = [
-    "Підписники на початок періоду",
-    "Підписники на кінець періоду",
+    "Користувачів на початок періоду",
+    "Користувачів на кінець періоду",
     "Нові користувачі",
     "Реактивовані користувачі",
     "Churned users",
@@ -456,8 +516,8 @@ for tariff in theory_tariffs + full_tariffs:
         col_group = "Лише теорія" if "Theory Only" in tariff else "Повний доступ"
 
         # Запис значень у таблицю
-        data.loc["Підписники на початок періоду", (col_group, col_label)] = start_val
-        data.loc["Підписники на кінець періоду", (col_group, col_label)] = end_val
+        data.loc["Користувачів на початок періоду", (col_group, col_label)] = start_val
+        data.loc["Користувачів на кінець періоду", (col_group, col_label)] = end_val
         data.loc["Нові користувачі", (col_group, col_label)] = new_val
         data.loc["Реактивовані користувачі", (col_group, col_label)] = reactivated_val
         data.loc["Churned users", (col_group, col_label)] = churned_val
@@ -493,3 +553,19 @@ st.markdown(
     .to_html(),
     unsafe_allow_html=True
 )
+
+# 🧾 Розрахунок загальної статистики компаній, студентів і профілів
+# Беремо останнє значення total в отфильтрованных данных (companies_filtered, students_filtered, users_filtered)
+total_companies = int(companies_filtered["total"].iloc[-1]) if not companies_filtered.empty else 0
+total_students  = int(students_filtered["total"].iloc[-1])  if not students_filtered.empty  else 0
+total_profiles  = int(users_filtered["total"].iloc[-1])     if not users_filtered.empty     else 0
+total_trials  = int(trials_filtered["active"].iloc[-1])     if not trials_filtered.empty     else 0
+
+# Вивід блока метрик
+st.markdown("<a id='companies-students-profiles-trials'></a>", unsafe_allow_html=True)
+st.subheader("Компанії, студенти, профілі та тріали")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Компанії", total_companies)
+c2.metric("Студенти", total_students)
+c3.metric("Профілі", total_profiles)
+c4.metric("Тріали", total_trials)
