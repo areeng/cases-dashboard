@@ -149,10 +149,9 @@ start_date, end_date = st.sidebar.date_input(
 # Навигація по розділам
 st.sidebar.header("Навігація")
 nav_items = {
-    "Метрики": "metrics",
-    "Цільові показники місяця": "monthly-targets",
+    "Статистика передплат": "metrics",
     "Порівняння тарифів": "tariff-comparison",
-    "Компанії, студенти, профілі та тріали": "companies-students-profiles-trials"
+    "Статистика профілів та тріалів": "companies-students-profiles-trials"
 }
 for label, anchor in nav_items.items():
     st.sidebar.markdown(f"<a href='#{anchor}'>{label}</a>", unsafe_allow_html=True)
@@ -255,7 +254,7 @@ churned_total = int(churned_series.sum())
 
 # 📌 Виведення основних метрик в один ряд
 st.markdown("<a id='metrics'></a>", unsafe_allow_html=True)
-st.subheader("Метрики")
+st.subheader("Статистика передплат")
 
 col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 col1.metric("Користувачів\nна початок періоду", start_value)
@@ -556,16 +555,74 @@ st.markdown(
 
 # 🧾 Розрахунок загальної статистики компаній, студентів і профілів
 # Беремо останнє значення total в отфильтрованных данных (companies_filtered, students_filtered, users_filtered)
-total_companies = int(companies_filtered["total"].iloc[-1]) if not companies_filtered.empty else 0
-total_students  = int(students_filtered["total"].iloc[-1])  if not students_filtered.empty  else 0
-total_profiles  = int(users_filtered["total"].iloc[-1])     if not users_filtered.empty     else 0
-total_trials  = int(trials_filtered["active"].iloc[-1])     if not trials_filtered.empty     else 0
+#total_companies = int(companies_filtered["total"].iloc[-1]) if not companies_filtered.empty else 0
+#total_students  = int(students_filtered["total"].iloc[-1])  if not students_filtered.empty  else 0
+#total_profiles  = int(users_filtered["total"].iloc[-1])     if not users_filtered.empty     else 0
+#total_trials  = int(trials_filtered["active"].iloc[-1])     if not trials_filtered.empty     else 0
 
 # Вивід блока метрик
+#st.subheader("Статистика профілів та тріалів")
+#c1, c2, c3, c4 = st.columns(4)
+#c1.metric("Компанії", total_companies)
+#c2.metric("Студенти", total_students)
+#c3.metric("Профілі", total_profiles)
+#c4.metric("Тріали", total_trials)
+
+# 📈 Графіки по кожному показнику
+
 st.markdown("<a id='companies-students-profiles-trials'></a>", unsafe_allow_html=True)
-st.subheader("Компанії, студенти, профілі та тріали")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Компанії", total_companies)
-c2.metric("Студенти", total_students)
-c3.metric("Профілі", total_profiles)
-c4.metric("Тріали", total_trials)
+row1_col1, row1_col2 = st.columns(2)
+
+with row1_col1:
+    st.subheader("Компанії")
+    chart_comp = companies_filtered[["date", "total"]].rename(columns={"total": "Компанії"})
+    fig_comp = px.line(
+        chart_comp,
+        x="date",
+        y="Компанії",
+        markers=True,
+    )
+    fig_comp.update_layout(xaxis_title=None, yaxis_title=None)
+    fig_comp.update_xaxes(tickmode="linear", tickangle=45)
+    st.plotly_chart(fig_comp, use_container_width=True)
+
+with row1_col2:
+    st.subheader("Тріали")
+    chart_trial = trials_filtered[["date", "active"]].rename(columns={"active": "Тріали"})
+    fig_trial = px.line(
+        chart_trial,
+        x="date",
+        y="Тріали",
+        markers=True,
+    )
+    fig_trial.update_layout(xaxis_title=None, yaxis_title=None)
+    fig_trial.update_xaxes(tickmode="linear", tickangle=45)
+    st.plotly_chart(fig_trial, use_container_width=True)
+
+row2_col1, row2_col2 = st.columns(2)
+
+with row2_col1:
+    st.subheader("Студенти")
+    chart_stud = students_filtered[["date", "total"]].rename(columns={"total": "Студенти"})
+    fig_stud = px.line(
+        chart_stud,
+        x="date",
+        y="Студенти",
+        markers=True,
+    )
+    fig_stud.update_layout(xaxis_title=None, yaxis_title=None)
+    fig_stud.update_xaxes(tickmode="linear", tickangle=45)
+    st.plotly_chart(fig_stud, use_container_width=True)
+
+with row2_col2:
+    st.subheader("Профілі")
+    chart_prof = users_filtered[["date", "total"]].rename(columns={"total": "Профілі"})
+    fig_prof = px.line(
+        chart_prof,
+        x="date",
+        y="Профілі",
+        markers=True,
+    )
+    fig_prof.update_layout(xaxis_title=None, yaxis_title=None)
+    fig_prof.update_xaxes(tickmode="linear", tickangle=45)
+    st.plotly_chart(fig_prof, use_container_width=True)
