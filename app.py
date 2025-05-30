@@ -5,6 +5,53 @@ import numpy as np
 import re
 from datetime import timedelta
 
+# ==== Глобальна функція форматування чисел ====
+
+from streamlit.delta_generator import DeltaGenerator
+
+def format_number(val):
+    """
+    Форматує числа у стилі UA:
+    - цілі: розділяє тисячі пробілом (12 345 678)
+    - дробові: розділяє тисячі пробілом і використовує кому як десятковий роздільник (12 345 678,90)
+    """
+    import numpy as _np
+
+    # ціле число
+    if isinstance(val, (int, _np.integer)):
+        s = f"{val:,}"            # '12,345,678'
+        return s.replace(",", " ")  # '12 345 678'
+
+    # число з плаваючою крапкою
+    elif isinstance(val, (float, _np.floating)):
+        s = f"{val:,.2f}"         # '12,345,678.90'
+        s = s.replace(",", " ")   # '12 345 678.90'
+        return s.replace(".", ",")  # '12 345 678,90'
+
+    # рядок із десятковим роздільником у вигляді крапки
+    elif isinstance(val, str):
+        # замінюємо крапку на кому
+        return val.replace(".", ",")
+
+    # усе інше повертаємо без змін
+    return val
+
+# ==== Підміна методу metric у DeltaGenerator, щоб автоматично форматувати числа ====
+_orig_dd_metric = DeltaGenerator.metric
+
+def _dd_metric(self, label: str, value, delta=None, **kwargs):
+    """
+    Обгортка над DeltaGenerator.metric, яка форматирує value і delta
+    через format_number.
+    """
+    # Форматуємо ВСЕ: int, float і рядки
+    formatted_value = format_number(value)
+    formatted_delta = format_number(delta) if delta is not None else None
+    return _orig_dd_metric(self, label, formatted_value, formatted_delta, **kwargs)
+
+# Підміна оригінальної функції
+DeltaGenerator.metric = _dd_metric
+
 @st.cache_data(show_spinner=False)
 def load_tariff_df(file_id):
     """Завантажує CSV з Google Drive, перетворює дату і повертає DataFrame"""
@@ -29,7 +76,7 @@ st.markdown(
 )
 
 # Заголовок дашборда
-st.title("CASES Dashboard - V2")
+st.title("CASES Dashboard")
 
 # 📂 Список файлів зі статистикою по компаніям, студентам, профілям та тріалам
 statistic_files = {
@@ -442,9 +489,9 @@ full_tariffs = [name for name in tariff_names if "Full Access" in name]
 
 # 🧱 Створення заголовків MultiIndex
 multi_columns = pd.MultiIndex.from_tuples([
-    ("Лише теорія", name.replace("Theory Only ", "").replace("UAH", "грн")) for name in theory_tariffs
+    ("Лише теорія", name.replace("Theory Only ", "").replace("UAH", " грн")) for name in theory_tariffs
 ] + [
-    ("Повний доступ", name.replace("Full Access ", "").replace("UAH", "грн")) for name in full_tariffs
+    ("Повний доступ", name.replace("Full Access ", "").replace("UAH", " грн")) for name in full_tariffs
 ])
 
 # 📐 Порожня таблиця з MultiIndex-колонками
@@ -511,7 +558,7 @@ for tariff in theory_tariffs + full_tariffs:
         ltv_cac = ltv / cac if ltv and cac else None
 
         # Визначаємо колонку в таблиці
-        col_label = tariff.replace("Theory Only ", "").replace("Full Access ", "").replace("UAH", "грн")
+        col_label = tariff.replace("Theory Only ", "").replace("Full Access ", "").replace("UAH", " грн")
         col_group = "Лише теорія" if "Theory Only" in tariff else "Повний доступ"
 
         # Запис значень у таблицю
@@ -546,10 +593,11 @@ data = data.drop(index=hide_metrics)
 # 🖼 Вивід кастомної таблиці з центруванням заголовків
 st.markdown(
     data.style
-    .set_table_styles([
-        {"selector": "thead th", "props": [("text-align", "center")]}
-    ])
-    .to_html(),
+        .format(format_number)  # застосовуємо функцію форматування до всіх комірок
+        .set_table_styles([
+            {"selector": "thead th", "props": [("text-align", "center")]}
+        ])
+        .to_html(),
     unsafe_allow_html=True
 )
 
