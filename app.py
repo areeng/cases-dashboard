@@ -255,6 +255,9 @@ with tabs[0]:
     trials_filtered    = trials_df    [(trials_df["date"]     >= pd.to_datetime(start_date)) &
                                     (trials_df["date"]     <= pd.to_datetime(end_date))]
 
+    # Обчислення медіани для тріалів за вибраний період
+    median_trials = trials_filtered["active"].median() if not trials_filtered.empty else 0
+
     # 🔧 Перетворення колонок на числові типи
     for col in cols_to_convert:
         filtered_raw[col] = pd.to_numeric(filtered_raw.get(col, 0), errors="coerce").fillna(0)
@@ -670,6 +673,14 @@ with tabs[2]:
         )
         fig_trial.update_layout(xaxis_title=None, yaxis_title=None)
         fig_trial.update_xaxes(tickmode="linear", tickangle=45)
+        # Додаємо горизонтальну лінію-медіану
+        fig_trial.add_hline(
+            y=median_trials,
+            line_dash="dash",
+            line_color="orange",
+            annotation_text=f"Медіана: {int(median_trials)}",
+            annotation_position="top left"
+        )        
         st.plotly_chart(fig_trial, use_container_width=True)
 
     row2_col1, row2_col2 = st.columns(2)
