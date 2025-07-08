@@ -83,7 +83,12 @@ statistic_files = {
     "companies": "1OVBwvUjNbJFY_cvLCh6RynL_WKowqXJ2",
     "students": "1gJTkWUssnOKKlBSIxk6rQETuEaFTA9EL",
     "users": "1nuxKPhBP1qx09FcuCPG1uIobrG92dxHE",
-    "trials": "1AsIIcj-2lYQWXHfPoMWsdtA46nqUbduH"
+    "trials": "1AsIIcj-2lYQWXHfPoMWsdtA46nqUbduH",
+    "companies_awards": "1XXE81yxnme1LUis4EoobyJ_4chMrl3Cr",
+    "companies_services": "19zeQ2ArE6DdlU1WtIUzLY43sfW3tFc1A",
+    "news": "1Dlc-hFOQkjXoszv4uZVulFgZ4AxslxlP",
+    "articles": "1sYk2s9HyS-YuXieILm6eAyf1uHLSSVel",
+    "cases": "1VEWKmAv2EmFkcYTNWzsvtcpaeoYREqqu",
 }
 
 # 📦 Список тарифів
@@ -105,7 +110,7 @@ tariff_files = {
 tabs = st.tabs([
     "Статистика передплат",
     "Порівняння тарифів",
-    "Статистика профілів та тріалів"
+    "Активність"
 ])
 
 with tabs[0]:
@@ -215,7 +220,7 @@ with tabs[0]:
     # nav_items = {
     #     "Статистика передплат": "metrics",
     #     "Порівняння тарифів": "tariff-comparison",
-    #     "Статистика профілів та тріалів": "companies-students-profiles-trials"
+    #     "Активність": "companies-students-profiles-trials"
     # }
     # for label, anchor in nav_items.items():
     #     st.sidebar.markdown(f"<a href='#{anchor}'>{label}</a>", unsafe_allow_html=True)
@@ -244,6 +249,11 @@ with tabs[0]:
     students_df  = load_stat_file(statistic_files["students"])
     users_df     = load_stat_file(statistic_files["users"])
     trials_df    = load_stat_file(statistic_files["trials"])
+    companies_awards_df   = load_stat_file(statistic_files["companies_awards"])
+    companies_services_df = load_stat_file(statistic_files["companies_services"])
+    news_df     = load_stat_file(statistic_files["news"])
+    articles_df = load_stat_file(statistic_files["articles"])
+    cases_df    = load_stat_file(statistic_files["cases"])
 
     # Фільтрація по вибраному періоду
     companies_filtered = companies_df[(companies_df["date"] >= pd.to_datetime(start_date)) &
@@ -254,7 +264,32 @@ with tabs[0]:
                                     (users_df["date"]     <= pd.to_datetime(end_date))]
     trials_filtered    = trials_df    [(trials_df["date"]     >= pd.to_datetime(start_date)) &
                                     (trials_df["date"]     <= pd.to_datetime(end_date))]
+    
+    companies_awards_filtered = companies_awards_df[
+        (companies_awards_df["date"] >= pd.to_datetime(start_date)) &
+        (companies_awards_df["date"] <= pd.to_datetime(end_date))
+    ]
 
+    companies_services_filtered = companies_services_df[
+        (companies_services_df["date"] >= pd.to_datetime(start_date)) &
+        (companies_services_df["date"] <= pd.to_datetime(end_date))
+    ]
+
+    news_filtered = news_df[
+        (news_df["date"] >= pd.to_datetime(start_date)) &
+        (news_df["date"] <= pd.to_datetime(end_date))
+    ]
+
+    articles_filtered = articles_df[
+        (articles_df["date"] >= pd.to_datetime(start_date)) &
+        (articles_df["date"] <= pd.to_datetime(end_date))
+    ]
+
+    cases_filtered = cases_df[
+        (cases_df["date"] >= pd.to_datetime(start_date)) &
+        (cases_df["date"] <= pd.to_datetime(end_date))
+    ]
+    
     # Обчислення медіани для тріалів за вибраний період
     median_trials = trials_filtered["active"].median() if not trials_filtered.empty else 0
 
@@ -637,7 +672,7 @@ with tabs[2]:
     #total_trials  = int(trials_filtered["active"].iloc[-1])     if not trials_filtered.empty     else 0
 
     # Вивід блока метрик
-    #st.subheader("Статистика профілів та тріалів")
+    #st.subheader("Активність")
     #c1, c2, c3, c4 = st.columns(4)
     #c1.metric("Компанії", total_companies)
     #c2.metric("Студенти", total_students)
@@ -710,3 +745,88 @@ with tabs[2]:
         fig_prof.update_layout(xaxis_title=None, yaxis_title=None)
         fig_prof.update_xaxes(tickmode="linear", tickangle=45)
         st.plotly_chart(fig_prof, use_container_width=True)
+
+    row3_col1, row3_col2 = st.columns(2)
+
+    with row3_col1:
+        st.subheader("Активність компаній")
+                
+        awards_and_services = pd.DataFrame({
+            "date": companies_awards_filtered["date"],
+            "Додали нагороди": companies_awards_filtered["total"]
+        }).merge(
+            pd.DataFrame({
+                "date": companies_services_filtered["date"],
+                "Додали послуги": companies_services_filtered["total"]
+            }),
+            on="date", how="outer"
+        ).sort_values("date")
+                   
+        fig_activity = px.line(
+            awards_and_services,
+            x="date",
+            y=["Додали нагороди", "Додали послуги"],
+            markers=True
+        )
+        fig_activity.update_layout(
+            xaxis_title=None, 
+            yaxis_title=None,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5
+            ),
+            legend_title_text=''
+        )
+        fig_activity.update_xaxes(tickmode="linear", tickangle=45)
+        st.plotly_chart(fig_activity, use_container_width=True)
+
+    with row3_col2:
+        st.subheader("Матеріали, додані до платформи")
+        
+        materials = pd.DataFrame({
+            "date": news_filtered["date"],
+            "Новини": news_filtered["total"]
+        }).merge(
+            pd.DataFrame({
+                "date": articles_filtered["date"],
+                "Статті": articles_filtered["total"]
+            }),
+            on="date", how="outer"
+        ).merge(
+            pd.DataFrame({
+                "date": cases_filtered["date"],
+                "Кейси": cases_filtered["total"]
+            }),
+            on="date", how="outer"
+        ).sort_values("date")
+        
+        fig_materials = px.line(
+            materials,
+            x="date",
+            y=["Новини", "Статті", "Кейси"],
+            markers=True
+        )
+        
+        fig_materials = px.line(
+            materials,
+            x="date",
+            y=["Новини", "Статті", "Кейси"],
+            markers=True
+        )
+        fig_materials.update_layout(
+            xaxis_title=None, 
+            yaxis_title=None,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5
+            ),
+            legend_title_text=''
+        )
+        fig_materials.update_xaxes(tickmode="linear", tickangle=45)
+        st.plotly_chart(fig_materials, use_container_width=True)
