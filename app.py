@@ -784,49 +784,51 @@ with tabs[2]:
         st.plotly_chart(fig_activity, use_container_width=True)
 
     with row3_col2:
-        st.subheader("Матеріали, додані до платформи")
-        
-        materials = pd.DataFrame({
-            "date": news_filtered["date"],
-            "Новини": news_filtered["total"]
-        }).merge(
-            pd.DataFrame({
-                "date": articles_filtered["date"],
-                "Статті": articles_filtered["total"]
-            }),
-            on="date", how="outer"
-        ).merge(
-            pd.DataFrame({
-                "date": cases_filtered["date"],
-                "Кейси": cases_filtered["total"]
-            }),
-            on="date", how="outer"
-        ).sort_values("date")
-        
-        fig_materials = px.line(
-            materials,
+        st.subheader("Новини")
+        fig_news = px.line(
+            news_filtered,
             x="date",
-            y=["Новини", "Статті", "Кейси"],
+            y="total",
             markers=True
         )
-        
-        fig_materials = px.line(
-            materials,
-            x="date",
-            y=["Новини", "Статті", "Кейси"],
-            markers=True
-        )
-        fig_materials.update_layout(
-            xaxis_title=None, 
+        fig_news.update_layout(
+            xaxis_title=None,
             yaxis_title=None,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=-0.3,
-                xanchor="center",
-                x=0.5
-            ),
-            legend_title_text=''
+            showlegend=False
         )
-        fig_materials.update_xaxes(tickmode="linear", tickangle=45)
-        st.plotly_chart(fig_materials, use_container_width=True)
+        fig_news.update_xaxes(tickmode="linear", tickangle=45)
+        st.plotly_chart(fig_news, use_container_width=True)
+
+    row4_col1, row4_col2 = st.columns(2)
+
+    with row4_col1:
+        st.subheader("Статті")
+        fig_articles = px.line(
+            articles_filtered,
+            x="date",
+            y="total",
+            markers=True
+        )
+        fig_articles.update_layout(
+            xaxis_title=None,
+            yaxis_title=None,
+            showlegend=False
+        )
+        fig_articles.update_xaxes(tickmode="linear", tickangle=45)
+        st.plotly_chart(fig_articles, use_container_width=True)
+
+    with row4_col2:
+        st.subheader("Кейси")
+        fig_cases = px.line(
+            cases_filtered,
+            x="date",
+            y="total",
+            markers=True
+        )
+        fig_cases.update_layout(
+            xaxis_title=None,
+            yaxis_title=None,
+            showlegend=False
+        )
+        fig_cases.update_xaxes(tickmode="linear", tickangle=45)
+        st.plotly_chart(fig_cases, use_container_width=True)
