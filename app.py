@@ -4,6 +4,15 @@ import plotly.express as px
 import numpy as np
 import re
 from datetime import timedelta
+from google.oauth2 import service_account
+from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension, Filter, FilterExpression, FilterExpressionList
+
+# 🔐 Підключення до Google Analytics
+KEY_PATH = "cases-dashboard-465614-9925eb504133.json"
+PROPERTY_ID = "250470606"
+credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
+client = BetaAnalyticsDataClient(credentials=credentials)
 
 # ==== Глобальна функція форматування чисел ====
 
@@ -110,12 +119,13 @@ tariff_files = {
 tabs = st.tabs([
     "Статистика передплат",
     "Порівняння тарифів",
-    "Активність"
+    "Активність",
+    "Застосунок CASES"
 ])
 
 with tabs[0]:
 
-    # 🧩 Контрол для вибору тарифів
+        # 🧩 Контрол для вибору тарифів
     selected_tariffs = st.multiselect(
         "Оберіть тарифи",
         options=list(tariff_files.keys()),
@@ -637,17 +647,9 @@ with tabs[1]:
         except Exception as e:
             st.warning(f"Не вдалося завантажити або обробити дані для тарифу {tariff}: {e}")
 
-
-
-
     #Тимчасово приховуємо два рядки таблиці
     hide_metrics = ["CAC", "LTV / CAC"]
     data = data.drop(index=hide_metrics)
-
-
-
-
-
 
     # 🖼 Вивід кастомної таблиці з центруванням заголовків
     st.markdown(
@@ -832,3 +834,143 @@ with tabs[2]:
         )
         fig_cases.update_xaxes(tickmode="linear", tickangle=45)
         st.plotly_chart(fig_cases, use_container_width=True)
+
+with tabs[3]:
+
+# Графік "Активні користувачі PWA-застосунку"        
+    st.subheader("Активні користувачі PWA-застосунку")
+
+    # 📊 Запит до GA4: активні користувачі з режимом 'standalone' (PWA)
+    pwa_request = RunReportRequest(
+        property=f"properties/{PROPERTY_ID}",
+        dimensions=[Dimension(name="date")],
+        metrics=[Metric(name="activeUsers")],
+        date_ranges=[DateRange(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )],
+        dimension_filter=FilterExpression(
+            filter=Filter(
+                field_name="customUser:display_mode",
+                string_filter=Filter.StringFilter(value="standalone")
+            )
+        )
+    )
+
+    pwa_response = client.run_report(pwa_request)
+
+    # 📊 Запит до GA4: активні користувачі PWA на Android
+    pwa_android_request = RunReportRequest(
+        property=f"properties/{PROPERTY_ID}",
+        dimensions=[Dimension(name="date")],
+        metrics=[Metric(name="activeUsers")],
+        date_ranges=[DateRange(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )],
+        dimension_filter=FilterExpression(
+            and_group=FilterExpressionList(
+                expressions=[
+                    FilterExpression(
+                        filter=Filter(
+                            field_name="customUser:display_mode",
+                            string_filter=Filter.StringFilter(value="standalone")
+                        )
+                    ),
+                    FilterExpression(
+                        filter=Filter(
+                            field_name="operatingSystem",
+                            string_filter=Filter.StringFilter(value="Android")
+                        )
+                    )
+                ]
+            )
+        )
+    )
+
+    pwa_android_response = client.run_report(pwa_android_request)
+
+    # 🧾 Створення DataFrame для всіх користувачів
+    pwa_data = []
+    for row in pwa_response.rows:
+        date = row.dimension_values[0].value
+        count = int(row.metric_values[0].value)
+        pwa_data.append({"date": pd.to_datetime(date), "Всі користувачі PWA": count})
+
+    pwa_df = pd.DataFrame(pwa_data).sort_values("date")
+
+    # 🧾 Створення DataFrame для Android
+    pwa_android_data = []
+    for row in pwa_android_response.rows:
+        date = row.dimension_values[0].value
+        count = int(row.metric_values[0].value)
+        pwa_android_data.append({"date": pd.to_datetime(date), "Користувачі PWA з Android": count})
+
+    pwa_android_df = pd.DataFrame(pwa_android_data).sort_values("date")
+
+    # 🔗 Об'єднання двох DataFrame
+    combined_df = pd.merge(pwa_df, pwa_android_df, on="date", how="outer").fillna(0)
+
+    # 📈 Графік активних користувачів PWA та Android PWA
+    fig_pwa = px.line(
+        combined_df,
+        x="date",
+        y=["Всі користувачі PWA", "Користувачі PWA з Android"],
+        markers=True
+    )
+
+    fig_pwa.update_layout(
+        xaxis_title=None,
+        yaxis_title=None,
+        legend=dict(
+            orientation="h",         # горизонтально
+            yanchor="bottom",        # прив'язка знизу
+            y=-0.3,                  # трохи нижче графіка
+            xanchor="center",        # по центру
+            x=0.5,                   # по центру по осі X
+            title=None               # прибираємо заголовок "legend"
+        )
+    )
+
+    fig_pwa.update_xaxes(tickmode="linear", tickangle=45)
+    fig_pwa.update_traces(connectgaps=True)
+    st.plotly_chart(fig_pwa, use_container_width=True)
+    
+# Графік "Встановлення PWA-застосунку"        
+    st.subheader("Встановлення PWA-застосунку")
+
+    # 📊 Запит до GA4: кількість встановлень PWA (подія pwa_installed)
+    install_request = RunReportRequest(
+        property=f"properties/{PROPERTY_ID}",
+        dimensions=[Dimension(name="date")],
+        metrics=[Metric(name="eventCount")],
+        date_ranges=[DateRange(start_date=str(start_date), end_date=str(end_date))],
+        dimension_filter=FilterExpression(
+            filter=Filter(
+                field_name="eventName",
+                string_filter=Filter.StringFilter(value="pwa_installed")
+            )
+        )
+    )
+
+    install_response = client.run_report(install_request)
+
+    # 📄 Перетворення у DataFrame
+    install_data = []
+    for row in install_response.rows:
+        date = row.dimension_values[0].value
+        count = int(row.metric_values[0].value)
+        install_data.append({"date": pd.to_datetime(date), "Встановлення PWA": count})
+
+    install_df = pd.DataFrame(install_data).sort_values("date")
+
+    # 📈 Графік встановлень PWA
+    fig_install = px.line(
+        install_df,
+        x="date",
+        y="Встановлення PWA",
+        markers=True
+    )
+    fig_install.update_layout(xaxis_title=None, yaxis_title=None)
+    fig_install.update_xaxes(tickmode="linear", tickangle=45)
+    st.plotly_chart(fig_install, use_container_width=True)
