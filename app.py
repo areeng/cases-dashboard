@@ -3,15 +3,20 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 import re
+import os
+import json
+from streamlit.runtime.secrets import secrets
 from datetime import timedelta
 from google.oauth2 import service_account
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension, Filter, FilterExpression, FilterExpressionList
 
 # 🔐 Підключення до Google Analytics
-KEY_PATH = "cases-dashboard-465614-9925eb504133.json"
+key_dict = json.loads(secrets["GOOGLE_SERVICE_ACCOUNT_KEY"])
 PROPERTY_ID = "250470606"
-credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
+credentials = service_account.Credentials.from_service_account_info(
+    json.loads(os.environ["GA_CREDENTIALS_JSON"])
+)
 client = BetaAnalyticsDataClient(credentials=credentials)
 
 # ==== Глобальна функція форматування чисел ====
