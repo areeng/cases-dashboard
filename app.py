@@ -5,18 +5,19 @@ import numpy as np
 import re
 import os
 import json
-from streamlit.runtime.secrets import secrets
+# from streamlit.runtime.secrets import secrets
 from datetime import timedelta
 from google.oauth2 import service_account
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension, Filter, FilterExpression, FilterExpressionList
 
 # 🔐 Підключення до Google Analytics
-key_dict = json.loads(secrets["GOOGLE_SERVICE_ACCOUNT_KEY"])
-PROPERTY_ID = "250470606"
 credentials = service_account.Credentials.from_service_account_info(
-    json.loads(os.environ["GA_CREDENTIALS_JSON"])
+    st.secrets["google_credentials"]
 )
+PROPERTY_ID = st.secrets["property_id"]
+
+# Ініціалізуємо клієнт GA4
 client = BetaAnalyticsDataClient(credentials=credentials)
 
 # ==== Глобальна функція форматування чисел ====
