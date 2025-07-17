@@ -5,13 +5,18 @@ import numpy as np
 import re
 import os
 import json
-# from streamlit.runtime.secrets import secrets
 from datetime import timedelta
 from google.oauth2 import service_account
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension, Filter, FilterExpression, FilterExpressionList
 
 # 🔐 Підключення до Google Analytics
+# Debug: выведем длину и начало/конец private_key
+pk = st.secrets["google_credentials"]["private_key"]
+st.write("🔑 private_key length:", len(pk))
+st.write("🔑 private_key startswith:", repr(pk[:30]))
+st.write("🔑 private_key endswith:", repr(pk[-30:]))
+
 credentials = service_account.Credentials.from_service_account_info(
     st.secrets["google_credentials"]
 )
