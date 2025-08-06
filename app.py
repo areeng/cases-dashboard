@@ -8,7 +8,18 @@ import json
 from datetime import timedelta
 from google.oauth2 import service_account
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension, Filter, FilterExpression, FilterExpressionList
+from google.analytics.data_v1beta.types import (
+    RunReportRequest,
+    DateRange,
+    Metric,
+    Dimension,
+    Filter,
+    FilterExpression,
+    FilterExpressionList,
+    OrderBy,
+)
+
+st.set_page_config(page_title="CASES Dashboard", layout="wide")
 
 # 🔐 Підключення до Google Analytics
 credentials = service_account.Credentials.from_service_account_info(
@@ -76,8 +87,6 @@ def load_tariff_df(file_id):
     df = df.sort_values("date")
     return df
 
-st.set_page_config(page_title="CASES Dashboard", layout="wide")
-
 # CSS для плавного скролу з відступом
 st.markdown(
     """
@@ -125,7 +134,8 @@ tabs = st.tabs([
     "Статистика передплат",
     "Порівняння тарифів",
     "Активність",
-    "Застосунок CASES"
+    "Застосунок CASES",
+    "Сайт cases.media"
 ])
 
 with tabs[0]:
@@ -979,3 +989,84 @@ with tabs[3]:
     fig_install.update_layout(xaxis_title=None, yaxis_title=None)
     fig_install.update_xaxes(tickmode="linear", tickangle=45)
     st.plotly_chart(fig_install, use_container_width=True)
+
+#----------------------------------------------------------------------------
+with tabs[4]:
+    st.subheader("Унікальні користувачі сайту")
+
+    # Запит до GA4 на унікальних користувачів (totalUsers) за обраний період
+    site_request = RunReportRequest(
+        property=f"properties/{PROPERTY_ID}",
+        dimensions=[Dimension(name="date")],
+        metrics=[Metric(name="totalUsers")],
+        date_ranges=[DateRange(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )]
+    )
+    site_response = client.run_report(site_request)
+
+    # Перетворюємо відповідь у DataFrame
+    site_data = []
+    for row in site_response.rows:
+        date = row.dimension_values[0].value
+        count = int(row.metric_values[0].value)
+        site_data.append({
+            "date": pd.to_datetime(date),
+            "Унікальні користувачі": count
+        })
+    site_df = pd.DataFrame(site_data).sort_values("date")
+
+    # Малюємо лінійний графік унікальних користувачів
+    fig_site = px.line(
+        site_df,
+        x="date",
+        y="Унікальні користувачі",
+        markers=True
+    )
+    fig_site.update_layout(xaxis_title=None, yaxis_title=None)
+    fig_site.update_xaxes(tickmode="linear", tickangle=45)
+    st.plotly_chart(fig_site, use_container_width=True)
+
+    st.subheader("Топ-10 найпопулярніших сторінок за переглядами")
+
+    # Запит до GA4: топ-10 за кількістю переглядів сторінок
+    pages_request = RunReportRequest(
+        property=f"properties/{PROPERTY_ID}",
+        dimensions=[Dimension(name="pagePath")],
+        metrics=[Metric(name="screenPageViews")],
+        date_ranges=[DateRange(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )],
+        order_bys=[
+            OrderBy(
+                metric=OrderBy.MetricOrderBy(metric_name="screenPageViews"),
+                desc=True
+            )
+        ],
+        limit=10
+    )
+    pages_response = client.run_report(pages_request)
+
+    # Перетворюємо відповідь в DataFrame
+    pages_data = []
+    for row in pages_response.rows:
+        path = row.dimension_values[0].value
+        views = int(row.metric_values[0].value)
+        pages_data.append({"Сторінка": path, "Перегляди": views})
+    pages_df = pd.DataFrame(pages_data)
+
+    # Малюємо горизонтальну гістограму топ-10 сторінок
+    fig_pages = px.bar(
+        pages_df,
+        x="Перегляди",
+        y="Сторінка",
+        orientation="h"
+    )
+    fig_pages.update_layout(
+        xaxis_title=None,
+        yaxis_title=None,
+        yaxis=dict(autorange="reversed")  # найпопулярніша зверху
+    )
+    st.plotly_chart(fig_pages, use_container_width=True)
