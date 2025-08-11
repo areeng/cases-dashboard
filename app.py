@@ -118,7 +118,7 @@ statistic_files = {
 tariff_files = {
     "Full Access 0UAH": "1XoUhnsGUeVL3qwHMYJbk4mpCn3lhoEkB",
     # "Full Access 5UAH": "1ngAmfUoL3qYM6l_URNDECZRW35XC_thY",   це технічний тариф
-    "Full Access 250UAH": "1G60JUAk_vQVXVQnjZF9uK2VwUbYDlK6P",
+    # "Full Access 250UAH": "1G60JUAk_vQVXVQnjZF9uK2VwUbYDlK6P",
     "Full Access 350UAH": "1eYubeexGVF5MKJFZIF6ZOwEfDDad1zPB",
     "Full Access 390UAH": "1xeTeJV8JvOowE8JG5I6tog3euIKvDDNj",
     "Full Access 550UAH": "1b5fMQ_5Y522zJssO_AikhkLBTfI3p_Bf",
@@ -144,7 +144,7 @@ with tabs[0]:
     selected_tariffs = st.multiselect(
         "Оберіть тарифи",
         options=list(tariff_files.keys()),
-        default=["Full Access 250UAH"]
+        default=["Full Access 350UAH"]
     )
 
     # 🧾 Завантаження та об'єднання CSV-файлів
@@ -992,10 +992,10 @@ with tabs[3]:
 
 #----------------------------------------------------------------------------
 with tabs[4]:
-    st.subheader("Унікальні користувачі сайту")
+    st.subheader("Унікальні користувачі сайту та сеанси")
 
-    # Запит до GA4 на унікальних користувачів (totalUsers) за обраний період
-    site_request = RunReportRequest(
+    # 📊 Запит до GA4: унікальні користувачі
+    users_request = RunReportRequest(
         property=f"properties/{PROPERTY_ID}",
         dimensions=[Dimension(name="date")],
         metrics=[Metric(name="totalUsers")],
@@ -1004,30 +1004,60 @@ with tabs[4]:
             end_date=end_date.strftime("%Y-%m-%d")
         )]
     )
-    site_response = client.run_report(site_request)
-
-    # Перетворюємо відповідь у DataFrame
-    site_data = []
-    for row in site_response.rows:
+    users_response = client.run_report(users_request)
+    users_data = []
+    for row in users_response.rows:
         date = row.dimension_values[0].value
-        count = int(row.metric_values[0].value)
-        site_data.append({
-            "date": pd.to_datetime(date),
-            "Унікальні користувачі": count
-        })
-    site_df = pd.DataFrame(site_data).sort_values("date")
+        count = int(row.metric_values[0].value or 0)
+        users_data.append({"date": pd.to_datetime(date), "Унікальні користувачі": count})
+    users_df = pd.DataFrame(users_data).sort_values("date")
 
-    # Малюємо лінійний графік унікальних користувачів
-    fig_site = px.line(
-        site_df,
+    # 📊 Запит до GA4: сеанси
+    sessions_request = RunReportRequest(
+        property=f"properties/{PROPERTY_ID}",
+        dimensions=[Dimension(name="date")],
+        metrics=[Metric(name="sessions")],
+        date_ranges=[DateRange(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )]
+    )
+    sessions_response = client.run_report(sessions_request)
+    sessions_data = []
+    for row in sessions_response.rows:
+        date = row.dimension_values[0].value
+        count = int(row.metric_values[0].value or 0)
+        sessions_data.append({"date": pd.to_datetime(date), "Сеанси": count})
+    sessions_df = pd.DataFrame(sessions_data).sort_values("date")
+
+    # 🔗 Об'єднуємо два набори даних
+    merged_df = pd.merge(users_df, sessions_df, on="date", how="outer").fillna(0)
+
+    # 📈 Малюємо обидві серії на одному графіку
+    fig_combined = px.line(
+        merged_df,
         x="date",
-        y="Унікальні користувачі",
+        y=["Унікальні користувачі", "Сеанси"],
         markers=True
     )
-    fig_site.update_layout(xaxis_title=None, yaxis_title=None)
-    fig_site.update_xaxes(tickmode="linear", tickangle=45)
-    st.plotly_chart(fig_site, use_container_width=True)
+    fig_combined.update_layout(
+        xaxis_title=None,
+        yaxis_title=None,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.3,
+            xanchor="center",
+            x=0.5,
+            title=None
+        )
+    )
+    fig_combined.update_xaxes(tickmode="linear", tickangle=45)
+    fig_combined.update_traces(connectgaps=True)
+    st.plotly_chart(fig_combined, use_container_width=True)
 
+    
+    # -------------------- Топ-10 найпопулярніших сторінок за переглядами ---------------------
     st.subheader("Топ-10 найпопулярніших сторінок за переглядами")
 
     # Запит до GA4: топ-10 за кількістю переглядів сторінок
