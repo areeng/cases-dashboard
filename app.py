@@ -117,8 +117,7 @@ statistic_files = {
 # 📦 Список тарифів
 tariff_files = {
     "Full Access 0UAH": "1XoUhnsGUeVL3qwHMYJbk4mpCn3lhoEkB",
-    # "Full Access 5UAH": "1ngAmfUoL3qYM6l_URNDECZRW35XC_thY",   це технічний тариф
-    # "Full Access 250UAH": "1G60JUAk_vQVXVQnjZF9uK2VwUbYDlK6P",
+    "Full Access 250UAH": "1G60JUAk_vQVXVQnjZF9uK2VwUbYDlK6P",
     "Full Access 350UAH": "1eYubeexGVF5MKJFZIF6ZOwEfDDad1zPB",
     "Full Access 390UAH": "1xeTeJV8JvOowE8JG5I6tog3euIKvDDNj",
     "Full Access 550UAH": "1b5fMQ_5Y522zJssO_AikhkLBTfI3p_Bf",
@@ -144,7 +143,7 @@ with tabs[0]:
     selected_tariffs = st.multiselect(
         "Оберіть тарифи",
         options=list(tariff_files.keys()),
-        default=["Full Access 350UAH"]
+        default=["Full Access 250UAH"]
     )
 
     # 🧾 Завантаження та об'єднання CSV-файлів
