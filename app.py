@@ -238,17 +238,6 @@ with tabs[0]:
         unsafe_allow_html=True
     )
 
-
-    # Навигація по розділам
-    # st.sidebar.header("Навігація")
-    # nav_items = {
-    #     "Статистика передплат": "metrics",
-    #     "Порівняння тарифів": "tariff-comparison",
-    #     "Активність": "companies-students-profiles-trials"
-    # }
-    # for label, anchor in nav_items.items():
-    #     st.sidebar.markdown(f"<a href='#{anchor}'>{label}</a>", unsafe_allow_html=True)
-
     # Визначаємо колонки для числового перетворення
     cols_to_convert = [
         "start", "new", "reactivated",
@@ -394,19 +383,56 @@ with tabs[0]:
     # ➕ Додавання колонки Churned Users до таблиці
     aggregated_df["Churned Users"] = churned_series
 
-    # 📈 Графік "Users"
-    st.subheader("Користувачі")
+    # 📈 Графік "Користувачі на початок періоду"
+    st.subheader("Користувачі на початок періоду")
 
-    fig = px.line(
-        aggregated_df,
+    df_start = aggregated_df[["date", "start"]].rename(
+        columns={"start": "Користувачі на початок періоду"}
+    )
+
+    fig_start = px.line(
+        df_start,
         x="date",
-        y=["start", "new", "reactivated", "Churned Users"],
+        y="Користувачі на початок періоду",
         markers=True,
     )
-    fig.update_layout(xaxis_title=None, yaxis_title=None)
-    fig.update_xaxes(tickmode="linear", tickangle=45)
+    fig_start.update_layout(xaxis_title=None, yaxis_title=None, showlegend=False)
+    fig_start.update_xaxes(tickmode="linear", tickangle=45)
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig_start, use_container_width=True)
+
+    # 📈 Графік "Нові, реактивовані та втрачені користувачі"
+    st.subheader("Нові, реактивовані та втрачені користувачі")
+
+    df_flow = aggregated_df[["date", "new", "reactivated", "Churned Users"]].rename(
+        columns={
+            "new": "Нові",
+            "reactivated": "Реактивовані",
+            "Churned Users": "Втрачені користувачі"
+        }
+    )
+
+    fig_flow = px.line(
+        df_flow,
+        x="date",
+        y=["Нові", "Реактивовані", "Втрачені користувачі"],
+        markers=True,
+    )
+    fig_flow.update_layout(
+        xaxis_title=None,
+        yaxis_title=None,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.3,
+            xanchor="center",
+            x=0.5,
+            title=None
+        )
+    )
+    fig_flow.update_xaxes(tickmode="linear", tickangle=45)
+
+    st.plotly_chart(fig_flow, use_container_width=True)
 
     # 💰 Цільові показники
     st.markdown("<a id='monthly-targets'></a>", unsafe_allow_html=True)
